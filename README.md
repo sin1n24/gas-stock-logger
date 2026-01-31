@@ -59,16 +59,21 @@ Google Apps Script (GAS) を活用し、任意のECサイト（通販サイト�
 `getAllProductUrls(startUrl)` 関数を修正します。
 現在は `href` に `/products/` を含むリンクを探す仕様になっています。
 
+```javascript
 // 例: 商品リンクのパターンを変更する場合
 const regex = /<a\s+[^>]*href=["']([^"']*\/item\/[^"']+)["'][^>]*>/g;
+```
 
 ### 2. 在庫数の抽出ロジック
 `extractStockCount(html)` 関数を修正します。
+
 現在は「在庫数: XX」や「在庫：XX」というテキスト表記を探す仕様になっています。
 
+```javascript
 // 例: 特定のクラス名の中身を取得する場合
 // <span class="stock-qty">5</span>
 const match = html.match(/class="stock-qty">(\d+)</);
+```
 
 ### 3. ページネーション（次ページ）の取得
 `getAllProductUrls` 内の `nextMatch` 部分を、対象サイトの「次へ」ボタンのHTML構造に合わせて修正してください。
