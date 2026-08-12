@@ -33,8 +33,8 @@ Google Apps Script (GAS) を活用し、任意のECサイト（通販サイト�
     * コード上部の `CONFIG` エリアを編集します。
     ```javascript
     const CONFIG = {
-      TARGET_COLLECTION_URL: '[https://example.com/collections/all](https://example.com/collections/all)', // 監視したい販売品の一覧ページのURL
-      DOMAIN: '[https://example.com](https://example.com)', // サイトのドメイン
+      TARGET_COLLECTION_URL: 'https://example.com/collections/all', // 監視したい販売品の一覧ページのURL
+      DOMAIN: 'https://example.com', // サイトのドメイン
       NOTIFY_EMAIL: 'your-email@example.com', // 通知先メールアドレス
       // ...その他閾値設定
     };
