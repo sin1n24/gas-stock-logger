@@ -2,8 +2,8 @@
 // 設定エリア
 // ==========================================
 const CONFIG = {
-  TARGET_COLLECTION_URL: '[https://example.com/collections/all](https://example.com/collections/all)', // 監視したい販売品の一覧ページのURL
-  DOMAIN: '[https://example.com](https://example.com)', // サイトのドメイン
+  TARGET_COLLECTION_URL: 'https://example.com/collections/all', // 監視したい販売品の一覧ページのURL
+  DOMAIN: 'https://example.com', // サイトのドメイン
   NOTIFY_EMAIL: 'your-email@example.com', // 通知先メールアドレス
   
   DEFAULT_CAUTION_LIMIT: 3,   
@@ -14,9 +14,26 @@ const CONFIG = {
 // メイン関数
 // ==========================================
 
+function escFormula(s) {
+  return String(s).replace(/"/g, '""');
+}
+
 function updateInventoryAutomatic() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    console.log("別の実行が進行中のためスキップ");
+    return;
+  }
+  try {
+    updateInventoryAutomatic_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function updateInventoryAutomatic_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
+
   // 今年の西暦シート (例: "2026")
   const now = new Date();
   const currentYear = now.getFullYear().toString();
@@ -155,17 +172,28 @@ function updateInventoryAutomatic() {
       }
 
       newSheetData.push(rowData);
-      newFormulas.push([`=HYPERLINK("${url}", "${name}")`]);
-      
-      Utilities.sleep(1000); 
+      newFormulas.push([`=HYPERLINK("${url}", "${escFormula(name)}")`]);
+
+      Utilities.sleep(1000);
 
     } catch (e) {
       console.error(`エラー (${url}): ${e.message}`);
       if (dataMap.has(url)) {
         const oldRow = dataMap.get(url).row;
         newSheetData.push(oldRow);
-        newFormulas.push([`=HYPERLINK("${url}", "${oldRow[0]}")`]);
+        newFormulas.push([`=HYPERLINK("${url}", "${escFormula(oldRow[0])}")`]);
       }
+    }
+  }
+
+  // --- 廃番商品(今回取得できなかった既存商品)の温存 ---
+  const currentSet = new Set(productUrls);
+  for (const [url, existing] of dataMap.entries()) {
+    if (!currentSet.has(url)) {
+      const row = [...existing.row];
+      row[4] = "Discontinued";
+      newSheetData.push(row);
+      newFormulas.push([`=HYPERLINK("${url}", "${escFormula(row[0])}")`]);
     }
   }
 
@@ -184,6 +212,12 @@ function updateInventoryAutomatic() {
       sheet.getRange(3, 1, lastRow - 2, sheet.getLastColumn()).clearFormat(); 
     }
     
+    // 列数が足りない場合は先に確保しておく(日別ログが年後半で右端の列を超えるのを防ぐ)
+    const needCols = Math.max(maxCols, todayColIndex + 1);
+    if (sheet.getMaxColumns() < needCols) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), needCols - sheet.getMaxColumns());
+    }
+
     // 書き込み
     sheet.getRange(3, 1, numRows, maxCols).setValues(formattedData);
     sheet.getRange(3, 1, numRows, 1).setFormulas(newFormulas);
@@ -278,8 +312,12 @@ function initializeYearSheet(ss, yearStr) {
 function ensureDateHeader(sheet, date) {
   // R列(index 17)は空白、S列(index 18)から日付 -> colIndex 19 (1-based)
   const dayOfYear = getDayOfYear(date);
-  const colIndex = 19 + (dayOfYear - 1); 
-  
+  const colIndex = 19 + (dayOfYear - 1);
+
+  if (sheet.getMaxColumns() < colIndex) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), colIndex - sheet.getMaxColumns());
+  }
+
   const headerRange = sheet.getRange(2, 1, 1, colIndex);
   const headers = headerRange.getValues()[0];
   
@@ -349,8 +387,8 @@ function extractStockCount(html) {
 }
 
 function fetchHtml(url) {
-  try {
-    const options = { 'muteHttpExceptions': true };
-    return UrlFetchApp.fetch(url, options).getContentText();
-  } catch (e) { return ""; }
+  const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  const code = res.getResponseCode();
+  if (code !== 200) throw new Error(`HTTP ${code} for ${url}`);
+  return res.getContentText();
 }
